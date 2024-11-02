@@ -43,7 +43,17 @@ func formatDuration(duration time.Duration) string {
 	return fmt.Sprintf("%02d:%02d:%02d.%06d", hours, minutes, seconds, milliseconds)
 }
 
-func (ic *ImmichClient) AssetUpload(ctx context.Context, la *browser.LocalAssetFile) (AssetResponse, error) {
+func (ic *ImmichClient) GetAsset(ctx context.Context, ID string) (*Asset, error) {
+	var resp Asset
+	err := ic.newServerCall(ctx, EndPointGetAsset).
+		do(getRequest("/assets/"+ID, setAcceptJSON()), responseJSON(&resp))
+	return &resp, err
+}
+
+func (ic *ImmichClient) AssetUpload(
+	ctx context.Context,
+	la *browser.LocalAssetFile,
+) (AssetResponse, error) {
 	var ar AssetResponse
 	ext := path.Ext(la.FileName)
 	if strings.TrimSuffix(la.Title, ext) == "" {
@@ -261,7 +271,8 @@ func (ic *ImmichClient) GetAssetByID(ctx context.Context, id string) (*Asset, er
 		ID        string `json:"id"`
 	}{WithExif: true, IsVisible: true, ID: id}
 	r := Asset{}
-	err := ic.newServerCall(ctx, "GetAssetByID").do(postRequest("/search/metadata", "application/json", setAcceptJSON(), setJSONBody(body)), responseJSON(&r))
+	err := ic.newServerCall(ctx, "GetAssetByID").
+		do(postRequest("/search/metadata", "application/json", setAcceptJSON(), setJSONBody(body)), responseJSON(&r))
 	return &r, err
 }
 
@@ -292,7 +303,11 @@ func (ic *ImmichClient) UpdateAssets(ctx context.Context, ids []string,
 	return ic.newServerCall(ctx, "updateAssets").do(putRequest("/assets", setJSONBody(param)))
 }
 
-func (ic *ImmichClient) UpdateAsset(ctx context.Context, id string, a *browser.LocalAssetFile) (*Asset, error) {
+func (ic *ImmichClient) UpdateAsset(
+	ctx context.Context,
+	id string,
+	a *browser.LocalAssetFile,
+) (*Asset, error) {
 	type updAsset struct {
 		IsArchived  bool    `json:"isArchived"`
 		IsFavorite  bool    `json:"isFavorite"`
@@ -308,7 +323,8 @@ func (ic *ImmichClient) UpdateAsset(ctx context.Context, id string, a *browser.L
 		Longitude:   a.Metadata.Longitude,
 	}
 	r := Asset{}
-	err := ic.newServerCall(ctx, "updateAsset").do(putRequest("/assets/"+id, setJSONBody(param)), responseJSON(&r))
+	err := ic.newServerCall(ctx, "updateAsset").
+		do(putRequest("/assets/"+id, setJSONBody(param)), responseJSON(&r))
 	return &r, err
 }
 
@@ -318,5 +334,14 @@ func (ic *ImmichClient) StackAssets(ctx context.Context, coverID string, ids []s
 		return err
 	}
 
-	return ic.UpdateAssets(ctx, ids, cover.IsArchived, cover.IsFavorite, cover.ExifInfo.Latitude, cover.ExifInfo.Longitude, false, coverID)
+	return ic.UpdateAssets(
+		ctx,
+		ids,
+		cover.IsArchived,
+		cover.IsFavorite,
+		cover.ExifInfo.Latitude,
+		cover.ExifInfo.Longitude,
+		false,
+		coverID,
+	)
 }

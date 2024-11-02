@@ -23,6 +23,7 @@ type ImmichInterface interface {
 	GetServerStatistics(ctx context.Context) (ServerStatistics, error)
 	GetAssetStatistics(ctx context.Context) (UserStatistics, error)
 
+	GetAsset(ctx context.Context, ID string) (*Asset, error)
 	UpdateAsset(ctx context.Context, ID string, a *browser.LocalAssetFile) (*Asset, error)
 	GetAllAssets(ctx context.Context) ([]*Asset, error)
 	AddAssetToAlbum(context.Context, string, []string) ([]UpdateAlbumResult, error)
@@ -76,6 +77,7 @@ type ImmichInterface interface {
 	) (struct {
 		Count int `json:"count"`
 	}, error)
+	UntagAssets(ctx context.Context, tagID string, assetIDs []string) error
 }
 
 type UnsupportedMedia struct {
@@ -175,7 +177,7 @@ type Asset struct {
 	Duration         string            `json:"duration"`
 	ExifInfo         ExifInfo          `json:"exifInfo"`
 	LivePhotoVideoID string            `json:"livePhotoVideoId"`
-	Tags             []any             `json:"tags"`
+	Tags             []TagSimplified   `json:"tags"`
 	Checksum         string            `json:"checksum"`
 	StackParentID    string            `json:"stackParentId"`
 	JustUploaded     bool              `json:"-"`

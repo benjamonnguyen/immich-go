@@ -23,6 +23,10 @@ func (c *stubIC) GetAllAssetsWithFilter(context.Context, func(*immich.Asset) err
 	return nil
 }
 
+func (c *stubIC) GetAsset(ctx context.Context, ID string) (*immich.Asset, error) {
+	return nil, nil
+}
+
 func (c *stubIC) AssetUpload(
 	context.Context,
 	*browser.LocalAssetFile,
@@ -215,6 +219,14 @@ func (c *icCatchUploadsAssets) BulkTagAssets(
 	return struct {
 		Count int `json:"count"`
 	}{}, nil
+}
+
+func (ic *icCatchUploadsAssets) UntagAssets(
+	ctx context.Context,
+	tagID string,
+	assetIDs []string,
+) error {
+	return nil
 }
 
 func TestUpload(t *testing.T) {

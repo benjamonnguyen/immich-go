@@ -72,3 +72,13 @@ func (ic *ImmichClient) BulkTagAssets(
 
 	return resp, err
 }
+
+func (ic *ImmichClient) UntagAssets(ctx context.Context, tagID string, assetIDs []string) error {
+	body := struct {
+		IDs []string `json:"ids"`
+	}{IDs: assetIDs}
+
+	// TODO response body https://immich.app/docs/api/untag-assets
+	return ic.newServerCall(ctx, EndPointUntagAssets).
+		do(deleteRequest("/tags/"+tagID+"/assets", setJSONBody(body)))
+}

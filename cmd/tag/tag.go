@@ -37,15 +37,18 @@ type TagCmd struct {
 	TagWithSession bool                // Tag uploaded assets according to the format immich-go/YYYY-MM-DD/HH-MI-SS
 	TagWithPath    bool                // Hierarchically tag uploaded assets using path to assets
 	RemoveTags     datatype.StringList // List of tags to remove from assets. If list is empty all tags are removed.
+	RemoveAllTags  bool                // Remove all existing tags from assets.
 	TagCleanup     bool                // Trigger job to delete unused tags.
 
 	BrowserConfig asset.Configuration
 
-	AssetIndex       *asset.AssetIndex // List of assets present on the server
-	browser          browser.Browser
-	uploadedAssetIDs []string
-	tagToAssetIDs    map[string][]string
-	sessionTag       string
+	AssetIndex        *asset.AssetIndex // List of assets present on the server
+	browser           browser.Browser
+	uploadedAssetIDs  []string
+	tagToAssetIDs     map[string][]string
+	untagIDToAssetIDs map[string][]string
+	sessionTag        string
+	removeTagSet      map[string]struct{}
 }
 
 func TagCommand(ctx context.Context, common *cmd.SharedFlags, args []string) error {
@@ -116,8 +119,13 @@ func newCommand(
 	)
 	cmd.Var(
 		&app.RemoveTags,
-		"remove-tags",
-		"Comma separated tags to remove from assets before applying new tags. If option is provided without tags, all tags are removed.",
+		"remove",
+		"Comma separated tags to remove from assets before applying new tags",
+	)
+	cmd.BoolFunc(
+		"remove-all",
+		"Remove all existing tags from assets",
+		myflag.BoolFlagFn(&app.RemoveAllTags, false),
 	)
 	cmd.BoolFunc(
 		"tag-with-session",
@@ -143,7 +151,7 @@ func newCommand(
 	if len(app.Tags) == 0 && !app.TagWithPath && !app.TagWithSession && !app.TagCleanup &&
 		app.RemoveTags == nil {
 		return nil, errors.New(
-			`provide at least one of the following flags: -tags, -tag-with-path, -tag-with-session, -tag-cleanup, -remove-tags`,
+			`provide at least one of the following flags: -tags, -tag-with-path, -tag-with-session, -cleanup, -remove, -remove-all`,
 		)
 	}
 
@@ -152,6 +160,11 @@ func newCommand(
 	}
 
 	app.tagToAssetIDs = make(map[string][]string)
+	app.untagIDToAssetIDs = make(map[string][]string)
+	app.removeTagSet = make(map[string]struct{})
+	for _, tag := range app.RemoveTags {
+		app.removeTagSet[tag] = struct{}{}
+	}
 
 	if app.DebugFileList {
 		if len(cmd.Args()) < 2 {
@@ -184,7 +197,8 @@ func newCommand(
 		return nil, err
 	}
 
-	if len(app.Tags) > 0 || app.TagWithPath || app.TagWithSession || app.RemoveTags != nil {
+	if len(app.Tags) > 0 || app.TagWithPath || app.TagWithSession || len(app.removeTagSet) == 0 ||
+		!app.RemoveAllTags {
 		if len(app.fsyss) == 0 {
 			return nil, errors.New(
 				"No file found matching the pattern: " + strings.Join(cmd.Args(), ","),
@@ -257,14 +271,6 @@ func (app *TagCmd) getImmichAssets(ctx context.Context, updateFn func(value, max
 }
 
 func (app *TagCmd) uploadLoop(ctx context.Context) error {
-	/*
-		https://github.com/immich-app/immich/discussions/13637#discussioncomment-11017586
-		This hack resolve possible race condition where asset is moved out of upload dir
-		by pausing the storageTemplateMigration job
-	*/
-	app.Log.Info(fmt.Sprintf("Pausing %s job", immich.StorageTemplateMigration))
-	app.Immich.SendJobCommand(ctx, immich.StorageTemplateMigration, immich.Pause, false)
-
 	var err error
 	assetChan := app.browser.Browse(ctx)
 assetLoop:
@@ -285,6 +291,24 @@ assetLoop:
 					app.Jnl.Record(ctx, fileevent.Error, a, a.FileName, a.Err.Error())
 				}
 			}
+		}
+	}
+
+	if app.DryRun {
+		return nil
+	}
+
+	/*
+		https://github.com/immich-app/immich/discussions/13637#discussioncomment-11017586
+		This hack resolve possible race condition where asset is moved out of upload dir
+		by pausing the storageTemplateMigration job
+	*/
+	app.Log.Info(fmt.Sprintf("Pausing %s job", immich.StorageTemplateMigration))
+	app.Immich.SendJobCommand(ctx, immich.StorageTemplateMigration, immich.Pause, false)
+
+	for tagID, assetIDs := range app.untagIDToAssetIDs {
+		if err = app.Immich.UntagAssets(ctx, tagID, assetIDs); err != nil {
+			fmt.Printf("Failed untagging assets: %s", err)
 		}
 	}
 
@@ -399,11 +423,40 @@ func (app *TagCmd) handleAsset(ctx context.Context, a *browser.LocalAssetFile) e
 			)
 		}
 
-		fmt.Println(advice.ServerAsset.Tags...)
-		// TODO bnguyen if app.RemoveTags
-		// if app.RemoveTags != nil {
-		// 	advice.ServerAsset.Tags
-		// }
+		if app.RemoveAllTags || len(app.removeTagSet) > 0 {
+			fullAsset, err := app.Immich.GetAsset(ctx, advice.ServerAsset.ID)
+			if err != nil {
+				app.Jnl.Record(ctx, fileevent.Error, a, a.FileName, "error", err.Error())
+			}
+			for _, tag := range fullAsset.Tags {
+				reason := ""
+				if app.RemoveAllTags {
+					reason = "option -remove-all"
+				} else {
+					_, ok := app.removeTagSet[tag.Value]
+					if ok {
+						reason = "option -remove"
+					} else {
+						continue
+					}
+				}
+				app.Jnl.Record(
+					ctx,
+					fileevent.Untagged,
+					a,
+					a.FileName,
+					"tag",
+					tag.Value,
+					"reason",
+					reason,
+				)
+				if assetIDs := app.untagIDToAssetIDs[tag.ID]; assetIDs != nil {
+					app.untagIDToAssetIDs[tag.ID] = append(assetIDs, fullAsset.ID)
+				} else {
+					app.untagIDToAssetIDs[tag.ID] = []string{fullAsset.ID}
+				}
+			}
+		}
 
 		return nil
 	}
@@ -427,10 +480,6 @@ func tagAssets(
 	assetIDs []string,
 ) {
 	if len(tags) == 0 || len(assetIDs) == 0 {
-		return
-	}
-
-	if app.DryRun {
 		return
 	}
 

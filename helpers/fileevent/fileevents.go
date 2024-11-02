@@ -42,6 +42,7 @@ const (
 	// Tag
 	Tagged
 	TagNotOnServer
+	Untagged
 
 	Uploaded  // = "Uploaded"
 	Stacked   // = "Stacked"
@@ -75,6 +76,7 @@ var _code = map[Code]string{
 	// Tag
 	TagNotOnServer: "asset not on server",
 	Tagged:         "tagged",
+	Untagged:       "untagged",
 
 	Stacked:   "Stacked",
 	LivePhoto: "Live photo",
@@ -211,6 +213,7 @@ func (r *Recorder) ReportTags() {
 	sb.WriteString("----------\n")
 	for _, c := range []Code{
 		Tagged,
+		Untagged,
 		TagNotOnServer,
 	} {
 		sb.WriteString(fmt.Sprintf("%-40s: %7d\n", c.String(), r.counts[c]))

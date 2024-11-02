@@ -14,6 +14,10 @@ func (c *MockedCLient) GetAllAssetsWithFilter(context.Context, func(*immich.Asse
 	return nil
 }
 
+func (c *MockedCLient) GetAsset(ctx context.Context, ID string) (*immich.Asset, error) {
+	return nil, nil
+}
+
 func (c *MockedCLient) AssetUpload(
 	context.Context,
 	*browser.LocalAssetFile,
@@ -158,6 +162,10 @@ func (c *MockedCLient) BulkTagAssets(
 	return struct {
 		Count int `json:"count"`
 	}{}, nil
+}
+
+func (ic *MockedCLient) UntagAssets(ctx context.Context, tagID string, assetIDs []string) error {
+	return nil
 }
 
 func (c *MockedCLient) CreateJob(ctx context.Context, name immich.JobName) error {

@@ -16,6 +16,7 @@ import (
 )
 
 const (
+	EndPointGetAsset               = "GetAsset"
 	EndPointGetJobs                = "GetJobs"
 	EndPointSendJobCommand         = "SendJobCommand"
 	EndPointCreateJob              = "CreateJob"
@@ -34,6 +35,7 @@ const (
 	EndPointUpsertTags             = "UpsertTags"
 	EndPointTagAssets              = "TagAssets"
 	EndPointBulkTagAssets          = "BulkTagAssets"
+	EndPointUntagAssets            = "UntagAssets"
 )
 
 type TooManyInternalError struct {

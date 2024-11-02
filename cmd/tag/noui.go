@@ -43,11 +43,11 @@ func (app *TagCmd) runNoUI(ctx context.Context) error {
 		}
 
 		return fmt.Sprintf(
-			"\rImmich read %d%%, Assets found: %d, Tag errors: %d, Tagged %d %s",
+			"\rImmich read %d%%, Assets found: %d, Errors: %d, Tags: %d %s\n",
 			immichPct,
 			app.Jnl.TotalAssets(),
-			counts[fileevent.UploadServerError],
-			counts[fileevent.Uploaded],
+			counts[fileevent.TagNotOnServer],
+			counts[fileevent.Tagged],
 			string(spinner[spinIdx]),
 		)
 	}
