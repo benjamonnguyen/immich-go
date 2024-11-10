@@ -24,6 +24,8 @@ func (a AdviceCode) String() string {
 		return "SameOnServer"
 	case NotOnServer:
 		return "NotOnServer"
+	case TrashedOnServer:
+		return "TrashedOnServer"
 	}
 	return fmt.Sprintf("advice(%d)", a)
 }
@@ -34,6 +36,7 @@ const (
 	BetterOnServer
 	SameOnServer
 	NotOnServer
+	TrashedOnServer
 )
 
 type Advice struct {

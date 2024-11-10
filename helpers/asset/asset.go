@@ -117,6 +117,14 @@ func (ai *AssetIndex) adviceSameOnServer(sa *immich.Asset) *Advice {
 	}
 }
 
+func (ai *AssetIndex) adviceTrashedOnServer(sa *immich.Asset) *Advice {
+	return &Advice{
+		Advice:      TrashedOnServer,
+		Message:     "",
+		ServerAsset: sa,
+	}
+}
+
 // ShouldUpload check if the server has this asset
 //
 // The server may have different assets with the same name. This happens with photos produced by digital cameras.
@@ -132,6 +140,10 @@ func (ai *AssetIndex) GetAdvice(la *browser.LocalAssetFile) *Advice {
 	sa := ai.ByID[ID]
 	if sa != nil {
 		// the same ID exist on the server
+		if sa.IsTrashed {
+			return ai.adviceTrashedOnServer(sa)
+		}
+
 		return ai.adviceSameOnServer(sa)
 	}
 

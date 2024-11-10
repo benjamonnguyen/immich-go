@@ -6,6 +6,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path"
@@ -60,6 +61,7 @@ type UpCmd struct {
 	WhenNoDate             string           // When the date can't be determined use the FILE's date or NOW (default: FILE)
 	ForceUploadWhenNoJSON  bool             // Some takeout don't supplies all JSON. When true, files are uploaded without any additional metadata
 	BannedFiles            namematcher.List // List of banned file name patterns
+	ReuploadTrashed        bool             // Reupload asset if trashed on server
 
 	BrowserConfig asset.Configuration
 
@@ -234,6 +236,12 @@ func newCommand(
 		"debug-file-list",
 		app.DebugFileList,
 		"Check how the your file list would be processed",
+	)
+	cmd.BoolVar(
+		&app.ReuploadTrashed,
+		"reupload-trashed",
+		false,
+		"Reupload asset if trashed on server",
 	)
 
 	err = cmd.Parse(args)
@@ -566,6 +574,7 @@ func (app *UpCmd) handleAsset(ctx context.Context, a *browser.LocalAssetFile) er
 	}
 
 	advice := app.AssetIndex.GetAdvice(a)
+
 	switch advice.Advice {
 	case asset.NotOnServer: // Upload and manage albums
 		ID, err := app.UploadAsset(ctx, a)
@@ -607,6 +616,37 @@ func (app *UpCmd) handleAsset(ctx context.Context, a *browser.LocalAssetFile) er
 	case asset.BetterOnServer: // and manage albums
 		app.Jnl.Record(ctx, fileevent.UploadServerBetter, a, a.FileName, "reason", advice.Message)
 		app.manageAssetAlbum(ctx, advice.ServerAsset.ID, a, advice)
+
+	case asset.TrashedOnServer:
+		if app.ReuploadTrashed {
+			// NOTE only works with target path "."
+			// TODO restrict based on target path
+			copiedFilePath, err := copyFile(a.FileName)
+			if err != nil {
+				app.Jnl.Record(ctx, fileevent.Error, a, a.FileName, "error", err.Error())
+				return nil // TODO why return nil?
+			}
+			app.Jnl.Record(
+				ctx,
+				fileevent.ReuploadedTrashed,
+				a,
+				a.FileName,
+				"copiedFilePath",
+				copiedFilePath,
+			)
+			err = app.Immich.DeleteAssets(ctx, []string{advice.ServerAsset.ID}, true)
+			if err != nil {
+				app.Jnl.Record(ctx, fileevent.Error, a, a.FileName, "error", err.Error())
+				return nil
+			}
+			a.FileName = filepath.Join("copies", filepath.Base(copiedFilePath))
+			ID, err := app.UploadAsset(ctx, a)
+			if err != nil {
+				return nil
+			}
+			app.manageAssetAlbum(ctx, ID, a, advice)
+			os.Remove(copiedFilePath)
+		}
 	}
 
 	return nil
@@ -954,3 +994,43 @@ func (app *UpCmd) ManageAlbums(ctx context.Context) error {
 	return nil
 }
 */
+
+func copyFile(fileName string) (string, error) {
+	wd, _ := os.Getwd()
+	path := filepath.Join(wd, fileName)
+	// Open the source file
+	sourceFile, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("could not open source file: %v", err)
+	}
+	defer sourceFile.Close()
+
+	// Create the destination file
+	file := filepath.Base(path)
+	copiesDir := filepath.Join(wd, "copies")
+	if stat, _ := os.Stat(copiesDir); stat == nil {
+		if err = os.Mkdir(copiesDir, 0755); err != nil {
+			panic(err)
+		}
+	}
+	destinationPath := filepath.Join(copiesDir, file)
+	destinationFile, err := os.Create(destinationPath)
+	if err != nil {
+		return "", fmt.Errorf("could not create destination file: %v", err)
+	}
+	defer destinationFile.Close()
+
+	// Copy the contents from the source file to the destination file
+	_, err = io.Copy(destinationFile, sourceFile)
+	if err != nil {
+		return "", fmt.Errorf("could not copy file content: %v", err)
+	}
+
+	// Ensure the destination file is properly written and synced
+	err = destinationFile.Sync()
+	if err != nil {
+		return "", fmt.Errorf("could not sync destination file: %v", err)
+	}
+
+	return destinationPath, nil
+}

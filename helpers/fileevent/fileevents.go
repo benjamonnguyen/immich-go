@@ -38,6 +38,7 @@ const (
 	UploadAlbumCreated
 	UploadAddToAlbum  // = "Added to an album"
 	UploadServerError // = "Server error"
+	ReuploadedTrashed
 
 	// Tag
 	Tagged
@@ -72,6 +73,7 @@ var _code = map[Code]string{
 	UploadAlbumCreated:    "album created/updated",
 	UploadServerError:     "upload error",
 	Uploaded:              "uploaded",
+	ReuploadedTrashed:     "reuploaded trashed",
 
 	// Tag
 	TagNotOnServer: "asset not on server",
@@ -181,6 +183,7 @@ func (r *Recorder) Report() {
 		UploadUpgraded,
 		UploadServerDuplicate,
 		UploadServerBetter,
+		ReuploadedTrashed,
 	} {
 		sb.WriteString(fmt.Sprintf("%-40s: %7d\n", c.String(), r.counts[c]))
 	}
