@@ -6,7 +6,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path"
@@ -1014,23 +1013,22 @@ func copyFile(fileName string) (string, error) {
 		}
 	}
 	destinationPath := filepath.Join(copiesDir, file)
-	destinationFile, err := os.Create(destinationPath)
-	if err != nil {
-		return "", fmt.Errorf("could not create destination file: %v", err)
-	}
-	defer destinationFile.Close()
+	// destinationFile, err := os.Create(destinationPath)
+	// if err != nil {
+	// 	return "", fmt.Errorf("could not create destination file: %v", err)
+	// }
+	// defer destinationFile.Close()
 
 	// Copy the contents from the source file to the destination file
-	_, err = io.Copy(destinationFile, sourceFile)
-	if err != nil {
-		return "", fmt.Errorf("could not copy file content: %v", err)
+	if err := os.Rename(path, destinationPath); err != nil {
+		return "", fmt.Errorf("could not move file: %v", err)
 	}
 
 	// Ensure the destination file is properly written and synced
-	err = destinationFile.Sync()
-	if err != nil {
-		return "", fmt.Errorf("could not sync destination file: %v", err)
-	}
+	// err = destinationFile.Sync()
+	// if err != nil {
+	// 	return "", fmt.Errorf("could not sync destination file: %v", err)
+	// }
 
 	return destinationPath, nil
 }
